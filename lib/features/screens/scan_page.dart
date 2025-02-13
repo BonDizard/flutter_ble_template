@@ -7,7 +7,8 @@ import '../../core/common/loading.dart';
 import '../../core/common/reusable_button.dart';
 import '../../core/constants/color_constant.dart';
 import '../repository/bluetooth_provider.dart';
-import 'main_page.dart';
+import 'all_device_dashboard.dart';
+import 'device_screen.dart';
 
 class ScanPage extends ConsumerStatefulWidget {
   const ScanPage({super.key});
@@ -153,8 +154,8 @@ class _ScanPageState extends ConsumerState<ScanPage> {
       floatingActionButton: Padding(
         padding: EdgeInsets.only(right: width * 0.07, bottom: width * 0.07),
         child: Container(
-          decoration: const BoxDecoration(
-            borderRadius: BorderRadius.all(Radius.circular(15)),
+          decoration: BoxDecoration(
+            borderRadius: const BorderRadius.all(Radius.circular(15)),
             gradient: LinearGradient(
               colors: [
                 ColorConstants.onColorOne,
@@ -172,13 +173,13 @@ class _ScanPageState extends ConsumerState<ScanPage> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const MainPage(),
+                  builder: (context) => const AllDevicePages(),
                 ),
               );
             },
-            child: const Icon(
+            child: Icon(
               Icons.keyboard_arrow_right_sharp,
-              color: Colors.white,
+              color: ColorConstants.surface,
             ),
           ),
         ),
@@ -198,7 +199,7 @@ class _ScanPageState extends ConsumerState<ScanPage> {
       child: Container(
         width: width * 0.8,
         decoration: connected
-            ? const BoxDecoration(
+            ? BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
                     ColorConstants.onColorOne,
@@ -228,7 +229,7 @@ class _ScanPageState extends ConsumerState<ScanPage> {
                     offset: const Offset(-8, -8),
                   ),
                 ],
-                gradient: const LinearGradient(
+                gradient: LinearGradient(
                   colors: [
                     ColorConstants.backgroundColorOne,
                     ColorConstants.backgroundColorTwo,

@@ -5,6 +5,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logger/logger.dart';
 import '../../core/common/custom_toast.dart';
+import '../../core/constants/ble_constants.dart';
 import '../../models/ble_state_model.dart';
 
 final connectionStateProvider =
@@ -179,12 +180,12 @@ class BluetoothNotifier extends StateNotifier<BluetoothStateModel> {
           if (c.uuid.toString() == parametersModel.readUuid) {
             if (c.properties.read || c.properties.notify) {
               await c.setNotifyValue(true);
+
               await for (var value in c.lastValueStream) {
                 receivedData = String.fromCharCodes(value);
-
-                // processReceivedData(
-                //   receivedString: receivedData,
-                // );
+                processReceivedData(
+                  receivedString: receivedData,
+                );
                 break; // Assuming you want to stop listening after the first received data
               }
             }
@@ -193,11 +194,144 @@ class BluetoothNotifier extends StateNotifier<BluetoothStateModel> {
       }
     } catch (e) {
       CustomToast.showToast('Error while reading: $e');
-      if (kDebugMode) {
-        print('Error while reading: $e');
-      }
     }
     return receivedData;
+  }
+
+  void processReceivedData({required String receivedString}) {
+    decodeDWINCommand(receivedString);
+    try {
+      // RegExp wRegex = RegExp(r'w:([\d.]+)', caseSensitive: false);
+      // RegExp xRegex = RegExp(r'x:([\d.]+)', caseSensitive: false);
+      // RegExp yRegex = RegExp(r'y:([\d.]+)', caseSensitive: false);
+      // RegExp zRegex = RegExp(r'z:([\d.]+)', caseSensitive: false);
+      //
+      // RegExpMatch? wRegexMatch = wRegex.firstMatch(receivedString);
+      // double w = wRegexMatch != null
+      //     ? double.tryParse(wRegexMatch.group(1)!) ?? 0.0
+      //     : 0.0;
+      //
+      // RegExpMatch? xRegexMatch = xRegex.firstMatch(receivedString);
+      // double x = xRegexMatch != null
+      //     ? double.tryParse(xRegexMatch.group(1)!) ?? 0.0
+      //     : 0.0;
+      //
+      // RegExpMatch? yRegexMatch = yRegex.firstMatch(receivedString);
+      // double y = yRegexMatch != null
+      //     ? double.tryParse(yRegexMatch.group(1)!) ?? 0.0
+      //     : 0.0;
+      // RegExpMatch? zRegexMatch = zRegex.firstMatch(receivedString);
+      // double z = zRegexMatch != null
+      //     ? double.tryParse(zRegexMatch.group(1)!) ?? 0.0
+      //     : 0.0;
+      //
+      // BLEConstants.w = w.toInt();
+      // BLEConstants.x = x.toInt();
+      // BLEConstants.y = y.toInt();
+      // BLEConstants.z = z.toInt();
+    } catch (e) {
+      logger.i('Error processing received data: $e');
+      CustomToast.showToast(
+        'Error processing received data',
+      );
+    }
+  }
+
+  void decodeDWINCommand(String hexString) {
+    try {
+      // Normalize input: remove spaces, split into hex bytes
+      List<String> hexBytes = hexString
+          .trim()
+          .split(' ')
+          .where((byte) => byte.isNotEmpty) // Remove empty entries
+          .map((byte) => byte.toUpperCase()) // Normalize case
+          .toList();
+
+      print("hexBytes: $hexBytes");
+
+      // Validate DWIN command header
+      if (hexBytes.length < 6 || hexBytes[0] != "5A" || hexBytes[1] != "A5") {
+        print("Invalid DWIN command");
+        return;
+      }
+
+      List<String> extractedData = [];
+      int index = 0;
+      String vpAddress = ""; // Variable to store VP address
+
+      // Parse multiple DWIN packets in the input
+      while (index < hexBytes.length - 6) {
+        if (hexBytes[index] == "5A" && hexBytes[index + 1] == "A5") {
+          // Header found, get the data length
+          int dataLength;
+          try {
+            dataLength = int.parse(hexBytes[index + 2], radix: 16);
+          } catch (e) {
+            print("Invalid data length");
+            return;
+          }
+
+          // Extract VP Address
+          vpAddress = hexBytes[index + 4] + hexBytes[index + 5];
+
+          // Extract the data section
+          int startIndex =
+              index + 6; // Data starts after header, length, cmd, VP
+          int endIndex = startIndex + dataLength - 4; // Adjust for fixed bytes
+
+          if (endIndex <= hexBytes.length) {
+            extractedData.addAll(hexBytes.sublist(startIndex, endIndex));
+          }
+        }
+        index++;
+      }
+
+      // Convert hex to ASCII and remove unwanted spaces
+      String decodedString = extractedData
+          .map((hex) {
+            try {
+              return String.fromCharCode(int.parse(hex, radix: 16));
+            } catch (e) {
+              return ''; // Ignore invalid hex characters
+            }
+          })
+          .join()
+          .trim();
+
+      if (decodedString.isNotEmpty) {
+        print("Decoded Data: $decodedString");
+        int vpAddressInt = int.parse(vpAddress);
+        switch (vpAddressInt) {
+          case 1200:
+          case 1100:
+            BLEConstants.ph = double.parse(decodedString);
+            break;
+          case 1400:
+          case 1500:
+            BLEConstants.inp = double.parse(decodedString);
+            break;
+          case 1700:
+          case 1800:
+            BLEConstants.dissolvedOxygen = double.parse(decodedString);
+            break;
+          case 2000:
+          case 2100:
+            BLEConstants.totalSuspendedSolids = double.parse(decodedString);
+            break;
+          default:
+            logger.i('VP address not found');
+            CustomToast.showToast(
+              'VP address not found: $vpAddressInt',
+            );
+        }
+      } else {
+        logger.i("No valid data found: $decodedString");
+        CustomToast.showToast("No valid data found: $decodedString");
+      }
+    } catch (e) {
+      logger.i('Error processing received data: $e');
+      CustomToast.showToast('Error processing received data: $e');
+    }
   }
 
   Future<void> writeToDevice({

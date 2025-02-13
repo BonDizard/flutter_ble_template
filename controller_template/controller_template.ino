@@ -11,6 +11,7 @@ BLECharacteristic* pCharacteristic = NULL;
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
 
+// BLE Server Callbacks
 class ServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer* pServer) {
     deviceConnected = true;
@@ -23,12 +24,12 @@ class ServerCallbacks : public BLEServerCallbacks {
   }
 };
 
+// BLE Characteristic Callbacks
 class CharacteristicCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic* pCharacteristic) {
-    std::string value = pCharacteristic->getValue().c_str(); 
-
+    String value = pCharacteristic->getValue();
     if (value.length() > 0) {
-      Serial.println("Received message: " + String(value.c_str())); 
+      Serial.println("Received message: " + String(value.c_str()));
     }
   }
 };
@@ -41,11 +42,13 @@ void setup() {
   pServer = BLEDevice::createServer();
   pServer->setCallbacks(new ServerCallbacks());
 
-  BLEService *pService = pServer->createService(SERVICE_UUID);
+  BLEService* pService = pServer->createService(SERVICE_UUID);
 
-  pCharacteristic = pService->createCharacteristic(CHARACTERISTIC_UUID, BLECharacteristic::PROPERTY_WRITE);
+  pCharacteristic = pService->createCharacteristic(
+    CHARACTERISTIC_UUID,
+    BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
   pCharacteristic->addDescriptor(new BLE2902());
-  pCharacteristic->setCallbacks(new CharacteristicCallbacks()); 
+  pCharacteristic->setCallbacks(new CharacteristicCallbacks());
 
   pService->start();
 
@@ -56,9 +59,79 @@ void setup() {
   pAdvertising->setMinPreferred(0x12);
 
   BLEDevice::startAdvertising();
-
   Serial.println("Waiting for a client connection to receive data...");
 }
 
+String createDWINCommand(String vpAddress, float value) {
+    char valueBuffer[10];
+    snprintf(valueBuffer, sizeof(valueBuffer), "%.2f", value); // Convert float to string with 2 decimal places
+    
+    String asciiHexString = "";
+    for (int i = 0; valueBuffer[i] != '\0'; i++) {
+        char hexBuffer[3];
+        snprintf(hexBuffer, sizeof(hexBuffer), "%02X", valueBuffer[i]); // Convert char to HEX
+        asciiHexString += String(hexBuffer) + " ";
+    }
+
+    asciiHexString.trim(); // Fix: This modifies the existing string instead of returning void
+
+    // First command (clear previous data)
+    String clearData = "5A A5 35 82 " + vpAddress + " 20 20 20 20 20 20 20 20 20 20";
+
+    // Second command (write new value)
+    String newData = "5A A5 08 82 " + vpAddress + " " + asciiHexString;
+
+    return clearData + " " + newData;
+}
+
+
+
 void loop() {
+  if (deviceConnected) {
+    int w = random(0, 100);
+    int x = random(0, 100);
+    int y = random(0, 100);
+    int z = random(0, 100);
+
+    String wMessage = createDWINCommand("12 00", w);
+    String xMessage = createDWINCommand("15 00", x);
+    String yMessage = createDWINCommand("21 00", y);
+    String zMessage = createDWINCommand("17 00", z);
+
+    // Send each value separately
+    pCharacteristic->setValue(wMessage.c_str());
+    pCharacteristic->notify();
+    Serial.println("Sent: " + wMessage);
+    delay(200);
+
+    pCharacteristic->setValue(xMessage.c_str());
+    pCharacteristic->notify();
+    Serial.println("Sent: " + xMessage);
+    delay(200);
+
+    pCharacteristic->setValue(yMessage.c_str());
+    pCharacteristic->notify();
+    Serial.println("Sent: " + yMessage);
+    delay(200);
+
+    pCharacteristic->setValue(zMessage.c_str());
+    pCharacteristic->notify();
+    Serial.println("Sent: " + zMessage);
+    delay(200);
+
+    // Wait for next update
+    delay(1000);
+  }
+
+  // Handle disconnection and reconnection
+  if (!deviceConnected && oldDeviceConnected) {
+    delay(500);
+    pServer->startAdvertising();
+    Serial.println("Start advertising");
+    oldDeviceConnected = deviceConnected;
+  }
+
+  if (deviceConnected && !oldDeviceConnected) {
+    oldDeviceConnected = deviceConnected;
+  }
 }
